@@ -19,10 +19,7 @@ struct Light{
     vec4 dir;
     vec3 col;
 };
-Light uLights[NL];
-
-//vec4 Ldir[NL]; 
-//vec3 Lcol[NL];
+uniform Light uLights[NL];
 
 const int NS = 4; // Number of objects in the scene
 
@@ -35,14 +32,14 @@ struct Material{
     vec3 transparency;       // Transparency color. Black means the object is opaque.
     float indexOfRefelction; // Higher value means light will bend more as it refracts.
 };
-Material uMaterials[NS];
+uniform Material uMaterials[NS];
 
 struct Shape {
     int   type;   // 0 for Sphere. 1 for Cube. 2 for Octahedron
-    vec3  center;
+    vec4  center;
     float size;
 };
-Shape uShapes[NS];
+uniform Shape uShapes[NS];
 
 //halfSpace figure out the relation between a ray and a halfSpace
 vec2 halfSpace(vec4 V, vec4 W, vec4 P){
@@ -130,7 +127,7 @@ vec2 rayShape(vec4 V, vec4 W, Shape S){
 
 bool isInShadow(vec4 P, vec4 L, Shape S){
     for (int i=0;i<NS;i++){
-        if (rayShape(P+vec4((S.center),0.)-vec4((uShapes[i].center),0.), L, uShapes[i]).x>0.001){
+        if (rayShape(P+S.center-uShapes[i].center, L, uShapes[i]).x>0.001){
             return true;
         }
     }
@@ -138,7 +135,7 @@ bool isInShadow(vec4 P, vec4 L, Shape S){
 }
 
 vec4 computeSurfaceNormal(vec4 P, Shape S){
-    vec4 C = vec4((S.center),1.);
+    vec4 C = S.center;
     //Sphere
     if (S.type == 0){
         return vec4(normalize(P-C));
@@ -188,64 +185,6 @@ vec4 refractRay(vec4 W, vec4 N, float refractionRate){
 
 void main() {
 
-uLights[0].dir=vec4(normalize(vec3(1.,1.,0.3)),0.);
-uLights[0].col=vec3(1.,1.,1.);
-uLights[1].dir=vec4(normalize(vec3(-1.,1.,-1.)),-1.);
-//uLights[1].dir=vec4(normalize(vec3(-1.,-8.,1.)),0.);
-uLights[1].col=vec3(1.,1.,1.);
-
-//Definition for a cube
-uShapes[0].type = 1;
-uShapes[0].center=vec3(-.45*sin(uTime),.45*sin(uTime),.45*cos(uTime));
-//uShapes[0].center=vec3(.25,-.35,.25);
-uShapes[0].size = 0.12;
-uMaterials[0].ambient=vec3(0.,.2,.8);
-uMaterials[0].diffuse=vec3(.8,.5,.5);
-uMaterials[0].specular=vec3(0.,.5,.5);
-uMaterials[0].power=6.;
-uMaterials[0].reflection=vec3(0.0392, 0.7098, 0.9137);
-uMaterials[0].transparency=vec3(0.0, 0.5176, 1.0);
-uMaterials[0].indexOfRefelction=1.2;
-
-//Definition for an Octahedron
-uShapes[1].type = 2;
-uShapes[1].center= vec3(.45*sin(uTime),-.45*cos(uTime),.45*cos(uTime));
-//uShapes[1].center= vec3(-.45,0.2,0.);
-uShapes[1].size = 0.12;
-uMaterials[1].ambient=vec3(0.7882, 0.1059, 0.1059);
-uMaterials[1].diffuse=vec3(.5,.5,0.);
-uMaterials[1].specular=vec3(.5,.5,0.);
-uMaterials[1].power=10.;
-uMaterials[1].reflection=vec3(0.9059, 0.0314, 0.0314);
-uMaterials[1].transparency=vec3(0.6275, 0.1569, 0.1569);
-uMaterials[1].indexOfRefelction=1.4;
-
-//Definition for a Cube
-uShapes[2].type = 1;
-uShapes[2].center= vec3(.45*sin(uTime),.45*cos(uTime),-.45*sin(uTime));
-//uShapes[2].center= vec3(.2,.2,-.5);
-uShapes[2].size = 0.15;
-uMaterials[2].ambient=vec3(0.6157, 0.149, 0.4353);
-uMaterials[2].diffuse=vec3(0.8392, 0.7922, 0.149);
-uMaterials[2].specular=vec3(0.2667, 0.2667, 0.1412);
-uMaterials[2].power=4.;
-uMaterials[2].reflection=vec3(0.6549, 0.2549, 0.6235);
-uMaterials[2].transparency=vec3(0.7255, 0.1098, 0.698);
-uMaterials[2].indexOfRefelction=1.5;
-
-//Definition for an Sphere
-uShapes[3].type = 0;
-//uShapes[0].center=vec3(.45,.45*sin(uTime),.45*cos(uTime));
-uShapes[3].center=vec3(0.,0.,0.);
-uShapes[3].size = 0.18;
-uMaterials[3].ambient=vec3(0.0549, 0.4275, 0.2118);
-uMaterials[3].diffuse=vec3(0.0196, 0.1647, 0.2314);
-uMaterials[3].specular=vec3(0.0824, 0.0196, 0.2);
-uMaterials[3].power=6.;
-uMaterials[3].reflection=vec3(0.3216, 0.8667, 0.0706);
-uMaterials[3].transparency=vec3(0.0, 1.0, 0.8353);
-uMaterials[3].indexOfRefelction=1.2;
-
 vec4 N, P;
 float tMin = 1000.;
 vec3 color = vec3(0.,0.,0.);
@@ -254,7 +193,7 @@ for(int j =0; j<NS; j++)
     {
     vec4 V = vec4(0., 0., fl, 1.); //observer loc
     vec4 W = vec4(normalize(vec3(vPos.x, vPos.y, -fl)),0.);
-    V = V - vec4((uShapes[j].center),0.);
+    V = V - uShapes[j].center + vec4(0.,0.,0.,1.);
     float t = rayShape(V, W, uShapes[j]).x;
     if (t>0. && t<tMin){
         //Phong shading from lights
@@ -273,11 +212,11 @@ for(int j =0; j<NS; j++)
             vec4 Pp, Np;
             for (int k=0;k<NS;k++){
                 if(k==j){continue;}
-                float tReflection = rayShape(P+vec4((uShapes[j].center),0.)-vec4((uShapes[k].center),0.), Wp, uShapes[k]).x;
+                float tReflection = rayShape(P+uShapes[j].center-uShapes[k].center, Wp, uShapes[k]).x;
                 if (tReflection>0. && tReflection<tMinReflection){
                     S=uShapes[k];
                     M=uMaterials[k];
-                    Pp = P+vec4((uShapes[j].center),0.)-vec4((uShapes[k].center),0.)+tReflection*Wp;
+                    Pp = P+uShapes[j].center-uShapes[k].center+tReflection*Wp;
                     Np=computeSurfaceNormal(Pp,S);
                     tMinReflection = tReflection;
                 }
@@ -302,11 +241,11 @@ for(int j =0; j<NS; j++)
             vec4 Ppp, Npp;
             for(int k=0;k<NS;k++){
                 if(k==j){continue;}
-                float tRefraction = rayShape(Pp+vec4((uShapes[j].center),0.)-vec4((uShapes[k].center),0.), Wpp, uShapes[k]).x;
+                float tRefraction = rayShape(Pp+uShapes[j].center-uShapes[k].center, Wpp, uShapes[k]).x;
                 if (tRefraction>0.001 && tRefraction<tMinRefraction){
                     S=uShapes[k];
                     M=uMaterials[k];
-                    Ppp = Pp+vec4((uShapes[j].center),0.)-vec4((uShapes[k].center),0.)+tRefraction*Wpp;
+                    Ppp = Pp+uShapes[j].center-uShapes[k].center+tRefraction*Wpp;
                     Npp = computeSurfaceNormal(Ppp, S);
                     tMinRefraction = tRefraction;
                 }
