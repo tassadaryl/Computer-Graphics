@@ -1,5 +1,10 @@
 "use strict"
 const PI = 3.141592653589793;
+const SPHERE = 0;
+const CUBE = 1;
+const OCTAHEDRON = 2;
+const CYLINDER = 3;
+const HYPERBOLOID = 4;
 let cursor;
 
 async function setup(state) {
@@ -78,28 +83,24 @@ async function setup(state) {
                 state.uShapesLoc = [];
                 state.uShapesLoc[0] = {};
                 state.uShapesLoc[0].type   = gl.getUniformLocation(program, 'uShapes[0].type');
-                state.uShapesLoc[0].center = gl.getUniformLocation(program, 'uShapes[0].center');
-                state.uShapesLoc[0].size   = gl.getUniformLocation(program, 'uShapes[0].size');
                 state.uShapesLoc[0].matrix = gl.getUniformLocation(program, 'uShapes[0].matrix');
                 state.uShapesLoc[0].imatrix= gl.getUniformLocation(program, 'uShapes[0].imatrix');
                 state.uShapesLoc[1] = {};
                 state.uShapesLoc[1].type   = gl.getUniformLocation(program, 'uShapes[1].type');
-                state.uShapesLoc[1].center = gl.getUniformLocation(program, 'uShapes[1].center');
-                state.uShapesLoc[1].size   = gl.getUniformLocation(program, 'uShapes[1].size');
                 state.uShapesLoc[1].matrix = gl.getUniformLocation(program, 'uShapes[1].matrix');
                 state.uShapesLoc[1].imatrix= gl.getUniformLocation(program, 'uShapes[1].imatrix');
                 state.uShapesLoc[2] = {};
                 state.uShapesLoc[2].type   = gl.getUniformLocation(program, 'uShapes[2].type');
-                state.uShapesLoc[2].center = gl.getUniformLocation(program, 'uShapes[2].center');
-                state.uShapesLoc[2].size   = gl.getUniformLocation(program, 'uShapes[2].size');
                 state.uShapesLoc[2].matrix = gl.getUniformLocation(program, 'uShapes[2].matrix');
                 state.uShapesLoc[2].imatrix= gl.getUniformLocation(program, 'uShapes[2].imatrix');
                 state.uShapesLoc[3] = {};
                 state.uShapesLoc[3].type   = gl.getUniformLocation(program, 'uShapes[3].type');
-                state.uShapesLoc[3].center = gl.getUniformLocation(program, 'uShapes[3].center');
-                state.uShapesLoc[3].size   = gl.getUniformLocation(program, 'uShapes[3].size');
                 state.uShapesLoc[3].matrix = gl.getUniformLocation(program, 'uShapes[3].matrix');
                 state.uShapesLoc[3].imatrix= gl.getUniformLocation(program, 'uShapes[3].imatrix');
+                state.uShapesLoc[4] = {};
+                state.uShapesLoc[4].type   = gl.getUniformLocation(program, 'uShapes[4].type');
+                state.uShapesLoc[4].matrix = gl.getUniformLocation(program, 'uShapes[4].matrix');
+                state.uShapesLoc[4].imatrix= gl.getUniformLocation(program, 'uShapes[4].imatrix');
 
                 state.uMaterialsLoc = [];
                 state.uMaterialsLoc[0] = {};
@@ -134,6 +135,15 @@ async function setup(state) {
                 state.uMaterialsLoc[3].reflection       = gl.getUniformLocation(program, 'uMaterials[3].reflection');
                 state.uMaterialsLoc[3].transparency     = gl.getUniformLocation(program, 'uMaterials[3].transparency');
                 state.uMaterialsLoc[3].indexOfRefelction= gl.getUniformLocation(program, 'uMaterials[3].indexOfRefelction');
+                state.uMaterialsLoc[4] = {};
+                state.uMaterialsLoc[4].ambient          = gl.getUniformLocation(program, 'uMaterials[4].ambient');
+                state.uMaterialsLoc[4].diffuse          = gl.getUniformLocation(program, 'uMaterials[4].diffuse');
+                state.uMaterialsLoc[4].specular         = gl.getUniformLocation(program, 'uMaterials[4].specular');
+                state.uMaterialsLoc[4].power            = gl.getUniformLocation(program, 'uMaterials[4].power');
+                state.uMaterialsLoc[4].reflection       = gl.getUniformLocation(program, 'uMaterials[4].reflection');
+                state.uMaterialsLoc[4].transparency     = gl.getUniformLocation(program, 'uMaterials[4].transparency');
+                state.uMaterialsLoc[4].indexOfRefelction= gl.getUniformLocation(program, 'uMaterials[4].indexOfRefelction');
+                
             } 
         },
         {
@@ -297,11 +307,9 @@ function onStartFrame(t, state) {
     gl.uniform4fv(state.uLightsLoc[1].dir, [-.5774,.5774,-.5774,0.]);
     gl.uniform3fv(state.uLightsLoc[1].col, [1., 1., 1.]);
 
-    gl.uniform1i(state.uShapesLoc[0].type, 1);
-    gl.uniform4fv(state.uShapesLoc[0].center, [0.,-.45,0., 1.]);
-    gl.uniform1f(state.uShapesLoc[0].size, .12);
+    gl.uniform1i(state.uShapesLoc[0].type, CUBE);
     //var mat0 = translate(0.3*Math.sin(time)-0.1,0.0,-0.0);
-    var mat0 = multiply(rotateX(10*time),translate(0.2*Math.sin(time),0.,0.));
+    var mat0 = multiply(translate( .4,-.4,-.4), multiply(rotateX(time*15), scale(.1*Math.sin(time)+.1,.2,.1)));
     gl.uniformMatrix4fv(state.uShapesLoc[0].matrix , false, mat0);
     gl.uniformMatrix4fv(state.uShapesLoc[0].imatrix, false, inverse(mat0));
 
@@ -313,10 +321,8 @@ function onStartFrame(t, state) {
     gl.uniform3fv(state.uMaterialsLoc[0].transparency, [0.0, 0.5176, 1.0]);
     gl.uniform1f (state.uMaterialsLoc[0].indexOfRefelction, 1.2);
 
-    gl.uniform1i(state.uShapesLoc[1].type, 2);
-    gl.uniform4fv(state.uShapesLoc[1].center, [-.45,.45,0., 1.]);
-    gl.uniform1f(state.uShapesLoc[1].size, .12);
-    var mat1 = multiply(rotateY(time*15),rotateZ(time*15));
+    gl.uniform1i(state.uShapesLoc[1].type, OCTAHEDRON);
+    var mat1 = multiply(translate(-.4, .4,-.4), multiply(rotateY(time*20), scale(.15,.24,.15)));
     gl.uniformMatrix4fv(state.uShapesLoc[1].matrix , false, mat1);
     gl.uniformMatrix4fv(state.uShapesLoc[1].imatrix, false, inverse(mat1));
 
@@ -328,10 +334,9 @@ function onStartFrame(t, state) {
     gl.uniform3fv(state.uMaterialsLoc[1].transparency, [0.6275, 0.1569, 0.1569]);
     gl.uniform1f (state.uMaterialsLoc[1].indexOfRefelction, 1.4);
 
-    gl.uniform1i(state.uShapesLoc[2].type, 2);
-    gl.uniform4fv(state.uShapesLoc[2].center, [.45,.45,0., 1.]);
-    gl.uniform1f(state.uShapesLoc[2].size, .12);
-    var mat2 = multiply(scale(.2*Math.sin(time*2)+1.,.2*Math.sin(time*2)+1.,.2*Math.sin(time*2)+1.),rotateY(-15*time));
+    gl.uniform1i(state.uShapesLoc[2].type, CYLINDER);
+    //var mat2 = multiply(translate(-.4,-.4, 0.), multiply(rotateZ(30.), scale(.3,.2,.1)));
+    var mat2 =multiply(multiply(multiply(translate(-.45,-.45, -.3),scale(0.2,0.2,0.05)),rotateX(time*20)),rotateY(time*15));
     gl.uniformMatrix4fv(state.uShapesLoc[2].matrix , false, mat2);
     gl.uniformMatrix4fv(state.uShapesLoc[2].imatrix, false, inverse(mat2));
     gl.uniform3fv(state.uMaterialsLoc[2].ambient     , [0.6157, 0.149, 0.4353]);
@@ -342,10 +347,8 @@ function onStartFrame(t, state) {
     gl.uniform3fv(state.uMaterialsLoc[2].transparency, [0.7255, 0.1098, 0.698]);
     gl.uniform1f (state.uMaterialsLoc[2].indexOfRefelction, 1.5);
     
-    gl.uniform1i(state.uShapesLoc[3].type, 0);
-    gl.uniform4fv(state.uShapesLoc[3].center, [0.,0.,0.,1.]);
-    gl.uniform1f(state.uShapesLoc[3].size, .18);
-    var mat3 = identity();
+    gl.uniform1i(state.uShapesLoc[3].type, SPHERE);
+    var mat3 = multiply(translate( .4, .4,-.4*Math.sin(.5*time)),scale(.3,.1,.2));
     gl.uniformMatrix4fv(state.uShapesLoc[3].matrix , false, mat3);
     gl.uniformMatrix4fv(state.uShapesLoc[3].imatrix, false, inverse(mat3));
 
@@ -356,6 +359,19 @@ function onStartFrame(t, state) {
     gl.uniform3fv(state.uMaterialsLoc[3].reflection  , [0.3216, 0.8667, 0.0706]);
     gl.uniform3fv(state.uMaterialsLoc[3].transparency, [0.0, 1.0, 0.8353]);
     gl.uniform1f (state.uMaterialsLoc[3].indexOfRefelction, 1.2);
+
+    gl.uniform1i(state.uShapesLoc[4].type, HYPERBOLOID);
+    var mat4 = multiply(multiply(rotateX(time*15),rotateY(45)),scale(.08,.08,.12));
+    gl.uniformMatrix4fv(state.uShapesLoc[4].matrix , false, mat4);
+    gl.uniformMatrix4fv(state.uShapesLoc[4].imatrix, false, inverse(mat4));
+
+    gl.uniform3fv(state.uMaterialsLoc[4].ambient     , [0.1, 0.2, 0.3]);
+    gl.uniform3fv(state.uMaterialsLoc[4].diffuse     , [0.2, 0.2, 0.23]);
+    gl.uniform3fv(state.uMaterialsLoc[4].specular    , [0.1, 0.2, 0.2]);
+    gl.uniform1f (state.uMaterialsLoc[4].power       , 6.);
+    gl.uniform3fv(state.uMaterialsLoc[4].reflection  , [0.3216, 0.8667, 0.0706]);
+    gl.uniform3fv(state.uMaterialsLoc[4].transparency, [0.0, 1.0, 0.8353]);
+    gl.uniform1f (state.uMaterialsLoc[4].indexOfRefelction, 1.2);
 
     gl.enable(gl.DEPTH_TEST);
 }

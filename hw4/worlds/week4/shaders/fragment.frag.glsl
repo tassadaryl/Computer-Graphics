@@ -7,11 +7,14 @@ out vec4 fragColor;    // RESULT WILL GO HERE
 
 const float fl = 2.; 
 
-const int NCube = 6;
-vec4 Cube[NCube];      //Cube
+const int NSurface = 10;
+mat4 Surface[NSurface];
 
-const int NOctahedron = 8;
-vec4 Octahedron[NOctahedron];
+const int SPHERE = 0;
+const int CUBE = 1;
+const int OCTAHEDRON = 2;
+const int CYLINDER = 3;
+const int HYPERBOLOID = 4;
 
 const int NL = 2; // Number of light sources in the scene
 
@@ -21,7 +24,7 @@ struct Light{
 };
 uniform Light uLights[NL];
 
-const int NS = 4; // Number of objects in the scene
+const int NS = 5; // Number of objects in the scene
 
 struct Material{
     vec3 ambient;
@@ -36,108 +39,259 @@ uniform Material uMaterials[NS];
 
 struct Shape {
     int   type;   // 0 for Sphere. 1 for Cube. 2 for Octahedron
-    vec4  center;
-    float size;
     mat4 matrix;
     mat4 imatrix;
 };
 uniform Shape uShapes[NS];
 
-vec4 t_front, t_back;
+float t_front, t_back;
+mat4 t_front_surface, t_back_surface;
+vec4 n_front, n_back;
 
-//halfSpace figure out the relation between a ray and a halfSpace
+/* //halfSpace figure out the relation between a ray and a halfSpace
 vec2 halfSpace(vec4 V, vec4 W, vec4 P){
     float t = -dot(P, V)/dot(P, W);
     float origin = dot(P, V);
     return vec2(origin, t);
+} */
+/* mat4 transpose(mat4 S){
+    return mat4(S[0][0],S[1][0],S[2][0],S[3][0],S[0][1],S[1][1],S[2][1],S[3][1],S[0][2],S[1][2],S[2][2],S[3][2],S[0][3],S[1][3],S[2][3],S[3][3]);
+} */
+
+float in_or_out(vec4 V, mat4 S){
+    return dot(V, S*V);
+}
+
+vec2 rayQuadratic(mat4 Q, vec4 V, vec4 W){
+    float A=Q[0][0]*W.x*W.x+Q[0][1]*W.x*W.y+Q[0][2]*W.x*W.z+
+    Q[1][1]*W.y*W.y+Q[1][2]*W.y*W.z+
+    Q[2][2]*W.z*W.z;
+    float B=Q[0][0]*(V.x*W.x+V.x*W.x)+Q[0][1]*(V.x*W.y+V.y*W.x)+Q[0][2]*(V.x*W.z+V.z*W.x)+Q[0][3]*W.x+
+    Q[1][1]*(V.y*W.y+V.y*W.y)+Q[1][2]*(V.y*W.z+V.z*W.y)+Q[1][3]*W.y+
+    Q[2][2]*(V.z*W.z+V.z*W.z)+Q[2][3]*W.z;
+    float C=Q[0][0]*V.x*V.x+Q[0][1]*V.x*V.y+Q[0][2]*V.x*V.z+Q[0][3]*V.x+
+    Q[1][1]*V.y*V.y+Q[1][2]*V.y*V.z+Q[1][3]*V.y+
+    Q[2][2]*V.z*V.z+Q[2][3]*V.z+
+    Q[3][3];
+    if (A!=0.){
+        float dis = B*B-4.*A*C;
+        if (dis<0.){
+            return vec2(-1.,-1.);
+        }
+        float t1 = (-B-sqrt(dis))/(2.*A);
+        float t2 = (-B+sqrt(dis))/(2.*A);
+        return vec2(t1, t2);
+    }
+    else{
+        return vec2(-C/B, 0.);
+    }
+}
+
+vec4 computeQuadraticNormal(vec4 P, mat4 Q){
+    vec4 normal = vec4(normalize(vec3(2.*Q[0][0]*P.x+Q[0][1]*P.y+Q[0][2]*P.z+Q[0][3],
+    2.*Q[1][1]*P.y+Q[1][2]*P.z+Q[1][3],2.*Q[2][2]*P.z+Q[2][3])),0.);
+    return normal;
+}
+
+mat4 adjustMatrix(mat4 Q){
+    return mat4(Q[0][0],Q[0][1]+Q[1][0],Q[0][2]+Q[2][0],Q[0][3]+Q[3][0],
+    0.,Q[1][1],Q[1][2]+Q[2][1],Q[3][1]+Q[1][3],
+    0.,0.,Q[2][2],Q[2][3]+Q[3][2],
+    0.,0.,0.,Q[3][3]);
 }
          
 //rayShape computes the in and out t of an array into any shape
 //V is the origin of ray, w is the dir univec, S is the shape
 vec2 rayShape(vec4 V, vec4 W, Shape S){
+
+    mat4 transp = transpose(S.imatrix);
+    float tMin = -1000.;
+    float tMax = 1000.;    
+
     //Shpere
-    V = V - S.center + vec4(0.,0.,0.,1.); //shift V 
-    if (S.type == 0){
-        vec3 V_prime = V.xyz;
-        float discriminant = dot(V_prime,W.xyz)*dot(V_prime,W.xyz)-dot(V_prime,V_prime)+S.size*S.size;
-        if (discriminant < 0.){
-            return vec2(-1., -1.);
-        }
-        float t1 = -dot(V_prime,W.xyz)-sqrt(discriminant);
-        float t2 = -dot(V_prime,W.xyz)+sqrt(discriminant);
-        return vec2(t1, t2); 
+    if (S.type == SPHERE){
+        Surface[0] = mat4(1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,-1.);
+        Surface[0] = adjustMatrix(transp*Surface[0]*S.imatrix);
+        vec2 ans = rayQuadratic(Surface[0], V, W);
+        t_front = ans.x;
+        t_front_surface = Surface[0];
+        n_front = computeQuadraticNormal(V+t_front*W, Surface[0]);
+        t_back = ans.y;
+        t_back_surface = Surface[0];
+        n_back = computeQuadraticNormal(V+t_back*W, Surface[0]);
+        return ans;
     }
 
     //Cube
-    else if (S.type == 1){
-        //define 6 halfspaces of a cube
-        Cube[0] = vec4(-1.,0.,0.,-S.size)*S.imatrix;
-        Cube[1] = vec4(1.,0.,0.,-S.size)*S.imatrix;
-        Cube[2] = vec4(0.,-1.,0.,-S.size)*S.imatrix;
-        Cube[3] = vec4(0.,1.,0.,-S.size)*S.imatrix;
-        Cube[4] = vec4(0.,0.,-1.,-S.size)*S.imatrix;
-        Cube[5] = vec4(0.,0.,1.,-S.size)*S.imatrix;
+    else if (S.type == CUBE){
+        Surface[0] = mat4(0.,0.,0.,-1.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,-1.);
+        Surface[1] = mat4(0.,0.,0.,1.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,-1.);
+        Surface[2] = mat4(0.,0.,0.,0.,0.,0.,0.,-1.,0.,0.,0.,0.,0.,0.,0.,-1.);
+        Surface[3] = mat4(0.,0.,0.,0.,0.,0.,0.,1.,0.,0.,0.,0.,0.,0.,0.,-1.);
+        Surface[4] = mat4(0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,-1.,0.,0.,0.,-1.);
+        Surface[5] = mat4(0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,1.,0.,0.,0.,-1.);
 
-        float tMin = -1000.;
-        float tMax = 1000.;
-
-        for (int i=0; i<NCube; i++){
-            vec2 res = halfSpace(V, W, Cube[i]);
-            if (res.x>0. && res.y<0.){
-                return vec2(-1., -1.);
+        for (int i=0; i<6;i++){
+            Surface[i] = adjustMatrix(transp*Surface[i]*S.imatrix);
+            vec2 ans = rayQuadratic(Surface[i], V, W);
+            if (in_or_out(V, Surface[i])>0. && ans.x<0.){
+                return vec2(-1.,-1.);
             }
-            else if (res.x>0. && res.y>0.){
-                if (res.y>tMin){
-                    tMin=res.y;
-                    t_front=Cube[i];
+            else if (in_or_out(V, Surface[i])>0. && ans.x>0.){
+                if (ans.x>tMin){
+                    tMin = ans.x;
+                    t_front = ans.x;
+                    t_front_surface = Surface[i];
+                    n_front = computeQuadraticNormal(V+t_front*W, Surface[i]);
                 }
             }
-            else if (res.x<0. &&res.y>0.){
-                if (res.y<tMax){
-                    tMax=res.y;
-                    t_back=Cube[i];
+            else if (in_or_out(V, Surface[i])<0. && ans.x>0.){
+                if (ans.x<tMax){
+                    tMax = ans.x;
+                    t_back = ans.x;
+                    t_back_surface = Surface[i];
+                    n_back = computeQuadraticNormal(V+t_back*W, Surface[i]);
                 }
             }
         }
+
         if (tMin<tMax){return vec2(tMin, tMax);}
         else {return vec2(-1., -1.);}
     }
 
     //Octahedron
-    else if (S.type == 2){
-        //define 8 halfspaces of an octahedron
+    else if (S.type == OCTAHEDRON){
         float r3 = 1./sqrt(3.);
-        Octahedron[0] = vec4(-r3,-r3,-r3,-S.size)*S.imatrix;
-        Octahedron[1] = vec4(-r3,-r3,r3,-S.size)*S.imatrix;
-        Octahedron[2] = vec4(-r3,r3,-r3,-S.size)*S.imatrix;
-        Octahedron[3] = vec4(-r3,r3,r3,-S.size)*S.imatrix;
-        Octahedron[4] = vec4(r3,-r3,-r3,-S.size)*S.imatrix;
-        Octahedron[5] = vec4(r3,-r3,r3,-S.size)*S.imatrix;
-        Octahedron[6] = vec4(r3,r3,-r3,-S.size)*S.imatrix;
-        Octahedron[7] = vec4(r3,r3,r3,-S.size)*S.imatrix;
+        Surface[0] = mat4(0.,0.,0.,-r3,0.,0.,0.,-r3,0.,0.,0.,-r3,0.,0.,0.,-1.);
+        Surface[1] = mat4(0.,0.,0.,-r3,0.,0.,0.,-r3,0.,0.,0.,r3,0.,0.,0.,-1.);
+        Surface[2] = mat4(0.,0.,0.,-r3,0.,0.,0.,r3,0.,0.,0.,-r3,0.,0.,0.,-1.);
+        Surface[3] = mat4(0.,0.,0.,-r3,0.,0.,0.,r3,0.,0.,0.,r3,0.,0.,0.,-1.);
+        Surface[4] = mat4(0.,0.,0.,r3,0.,0.,0.,-r3,0.,0.,0.,-r3,0.,0.,0.,-1.);
+        Surface[5] = mat4(0.,0.,0.,r3,0.,0.,0.,-r3,0.,0.,0.,r3,0.,0.,0.,-1.);
+        Surface[6] = mat4(0.,0.,0.,r3,0.,0.,0.,r3,0.,0.,0.,-r3,0.,0.,0.,-1.);
+        Surface[7] = mat4(0.,0.,0.,r3,0.,0.,0.,r3,0.,0.,0.,r3,0.,0.,0.,-1.);
 
-        float tMin = -1000.;
-        float tMax = 1000.;
-
-        for (int i=0; i<NOctahedron; i++){
-            vec2 res = halfSpace(V, W, Octahedron[i]);
-            if (res.x>0. && res.y<0.){
-                return vec2(-1., -1.);
+        for (int i=0; i<8;i++){
+            Surface[i] = adjustMatrix(transp*Surface[i]*S.imatrix);
+            vec2 ans = rayQuadratic(Surface[i], V, W);
+            if (in_or_out(V, Surface[i])>0. && ans.x<0.){
+                return vec2(-1.,-1.);
             }
-            else if (res.x>0. && res.y>0.){
-                if (res.y>tMin){
-                    tMin=res.y;
-                    t_front=Octahedron[i];
+            else if (in_or_out(V, Surface[i])>0. && ans.x>0.){
+                if (ans.x>tMin){
+                    tMin = ans.x;
+                    t_front = ans.x;
+                    t_front_surface = Surface[i];
+                    n_front = computeQuadraticNormal(V+t_front*W, Surface[i]);
                 }
             }
-            else if (res.x<0. &&res.y>0.){
-                if (res.y<tMax){
-                    tMax=res.y;
-                    t_back=Octahedron[i];
+            else if (in_or_out(V, Surface[i])<0. && ans.x>0.){
+                if (ans.x<tMax){
+                    tMax = ans.x;
+                    t_back = ans.x;
+                    t_back_surface = Surface[i];
+                    n_back = computeQuadraticNormal(V+t_back*W, Surface[i]);
                 }
             }
         }
+
         if (tMin<tMax){return vec2(tMin, tMax);}
+        else {return vec2(-1., -1.);}
+    }
+    else if (S.type == CYLINDER){
+        float tCMin = 1000.;
+        float tCMax = -1000.;
+
+        Surface[0] = mat4(1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,0.,0.,0.,0.,0.,-1.);
+        Surface[0] = adjustMatrix(transp*Surface[0]*S.imatrix);
+        vec2 ans = rayQuadratic(Surface[0], V, W);
+        if(ans.x!=-1.){
+            tCMin = ans.x;
+            t_front = ans.x;
+            t_front_surface = Surface[0];
+            n_front = computeQuadraticNormal(V+t_front*W, Surface[0]);
+            tCMax = ans.y;
+            t_back = ans.y;
+            t_back_surface = Surface[0];
+            n_back = computeQuadraticNormal(V+t_back*W, Surface[0]);
+        }
+
+        Surface[1] = mat4(0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,-1.,0.,0.,0.,-1.);
+        Surface[2] = mat4(0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,1.,0.,0.,0.,-1.);
+
+        for (int i=1; i<3;i++){
+            Surface[i] = adjustMatrix(transp*Surface[i]*S.imatrix);
+            vec2 ans = rayQuadratic(Surface[i], V, W);
+            if (in_or_out(V, Surface[i])>0. && ans.x<0.){
+                return vec2(-1.,-1.);
+            }
+            else if (in_or_out(V, Surface[i])>0. && ans.x>0.){
+                if (ans.x>tCMin){
+                    tCMin = ans.x;
+                    t_front = ans.x;
+                    t_front_surface = Surface[i];
+                    n_front = computeQuadraticNormal(V+t_front*W, Surface[i]);
+                }
+            }
+            else if (in_or_out(V, Surface[i])<0. && ans.x>0.){
+                if (ans.x<tCMax){
+                    tCMax = ans.x;
+                    t_back = ans.x;
+                    t_back_surface = Surface[i];
+                    n_back = computeQuadraticNormal(V+t_back*W, Surface[i]);
+                }
+            }
+        }
+    
+        if (tCMin<tCMax){return vec2(tCMin, tCMax);}
+        else {return vec2(-1., -1.);}
+    }
+    else if (S.type == HYPERBOLOID){
+        float tCMin = 1000.;
+        float tCMax = -1000.;
+
+        Surface[0] = mat4(1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,-1.,0.,0.,0.,0.,-1.);
+        Surface[0] = adjustMatrix(transp*Surface[0]*S.imatrix);
+        vec2 ans = rayQuadratic(Surface[0], V, W);
+        if(ans.x!=-1.){
+            tCMin = ans.x;
+            t_front = ans.x;
+            t_front_surface = Surface[0];
+            n_front = computeQuadraticNormal(V+t_front*W, Surface[0]);
+            tCMax = ans.y;
+            t_back = ans.y;
+            t_back_surface = Surface[0];
+            n_back = computeQuadraticNormal(V+t_back*W, Surface[0]);
+        }
+
+        Surface[1] = mat4(0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,-1.,0.,0.,0.,-1.);
+        Surface[2] = mat4(0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,1.,0.,0.,0.,-1.);
+
+        for (int i=1; i<3;i++){
+            Surface[i] = adjustMatrix(transp*Surface[i]*S.imatrix);
+            vec2 ans = rayQuadratic(Surface[i], V, W);
+            if (in_or_out(V, Surface[i])>0. && ans.x<0.){
+                return vec2(-1.,-1.);
+            }
+            else if (in_or_out(V, Surface[i])>0. && ans.x>0.){
+                if (ans.x>tCMin){
+                    tCMin = ans.x;
+                    t_front = ans.x;
+                    t_front_surface = Surface[i];
+                    n_front = computeQuadraticNormal(V+t_front*W, Surface[i]);
+                }
+            }
+            else if (in_or_out(V, Surface[i])<0. && ans.x>0.){
+                if (ans.x<tCMax){
+                    tCMax = ans.x;
+                    t_back = ans.x;
+                    t_back_surface = Surface[i];
+                    n_back = computeQuadraticNormal(V+t_back*W, Surface[i]);
+                }
+            }
+        }
+    
+        if (tCMin<tCMax){return vec2(tCMin, tCMax);}
         else {return vec2(-1., -1.);}
     }
 }
@@ -151,37 +305,12 @@ bool isInShadow(vec4 P, vec4 L, Shape S){
     return false;
 }
 
-vec4 computeSurfaceNormal(vec4 P, Shape S){
-    vec4 P_m = P-S.center;
-    //Sphere
-    if (S.type == 0){
-        return vec4(normalize(P-S.center));
-    }
-    //Cube
-    else if (S.type == 1){
-        /* if (abs(P_m.x)>abs(P_m.y) && abs(P_m.x)>abs(P_m.z)){
-            return vec4(sign(P_m.x), 0., 0., 0.);
-        }
-        else if (abs(P_m.y)>abs(P_m.x) && abs(P_m.y)>abs(P_m.z)){
-            return vec4(0., sign(P_m.y), 0., 0.);
-        }
-        else if (abs(P_m.z)>abs(P_m.x) && abs(P_m.z)>abs(P_m.y)){
-            return vec4(0., 0., sign(P_m.z), 0.);
-        } */
-        return vec4(normalize(t_front.xyz),0.);
-    }
-    //Octahedron
-    else if (S.type == 2){
-        //return vec4(sign(P_m.xyz)*(1./sqrt(3.)),0.);
-        return vec4(normalize(t_front.xyz),0.);
-    }
 
-}
 
 
 //PhongShading
 vec3 phongShading(vec4 P, vec4 W, Shape S, Material M){
-    vec4 N = computeSurfaceNormal(P, S);
+    vec4 N = n_front;
     vec3 color = vec3(0.,0.,0.);
     for(int j=0;j<NL;j++){
         if (!isInShadow(P,uLights[j].dir,S)){
@@ -202,30 +331,6 @@ vec4 refractRay(vec4 W, vec4 N, float refractionRate){
     return Wp;
 }
 
-mat4 Cylinder = mat4(1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,0.,0.,0.,0.,0.,-1.);
-
-vec2 rayQuadratic(mat4 Q, vec4 V, vec4 W){
-    float A=Q[0][0]*W.x*W.x+Q[0][1]*W.x*W.y+Q[0][2]*W.x*W.z+Q[1][1]*W.y*W.y+Q[1][2]*W.y*W.z+Q[2][2]*W.z*W.z;
-    float B=Q[0][0]*(V.x*W.x+V.x*W.x)+Q[0][1]*(V.x*W.y+V.y*W.x)+Q[0][2]*(V.x*W.z+V.z*W.x)+Q[0][3]*W.x+
-    Q[1][1]*(V.y*W.y+V.y*W.y)+Q[1][2]*(V.y*W.z+V.z*W.y)+Q[1][3]*W.y+Q[2][2]*(V.z*W.z+V.z*W.z)+Q[2][3]*W.z;
-    float C=Q[0][0]*V.x*V.x+Q[0][1]*V.x*V.y+Q[0][2]*V.x+V.z+Q[0][3]*V.x+Q[1][1]*V.y*V.y+Q[1][2]*V.y*V.z+
-    Q[1][3]*V.y+Q[2][2]*V.z*V.z+Q[2][3]*V.z+Q[3][3];
-    float dis = B*B-4.*A*C;
-    if (dis<0.){
-        return vec2(-1.,-1.);
-    }
-    float t1 = (-B-sqrt(dis))/(2.*A);
-    float t2 = (-B+sqrt(dis))/(2.*A);
-    return vec2(t1, t2);
-}
-
-vec4 computeQuadraticNormal(mat4 Q, vec4 V, vec4 W, float t){
-    vec4 vect = V+t*W;
-    vec4 normal = vec4(normalize(vec3(2.*Q[0][0]*vect.x+Q[0][1]*vect.y+Q[0][2]*vect.z+Q[0][3],
-    2.*Q[1][1]*vect.y+Q[1][2]*vect.z+Q[1][3],2.*Q[2][2]*vect.z+Q[2][3])),0.);
-    return normal;
-}
-
 void main() {
 
 vec4 N, P;
@@ -240,7 +345,7 @@ for(int j =0; j<NS; j++)
     if (t>0. && t<tMin){
         //Phong shading from lights
         P=V+t*W;
-        N=computeSurfaceNormal(P, uShapes[j]); 
+        N=n_front;
         tMin=t;   
         color = uMaterials[j].ambient;
         color += phongShading(P, W, uShapes[j], uMaterials[j]);
@@ -259,7 +364,7 @@ for(int j =0; j<NS; j++)
                     S=uShapes[k];
                     M=uMaterials[k];
                     Pp = P+tReflection*Wp;
-                    Np=computeSurfaceNormal(Pp,S);
+                    Np=n_front;
                     tMinReflection = tReflection;
                 }
             }
@@ -274,7 +379,7 @@ for(int j =0; j<NS; j++)
             vec4 Wp = refractRay(W, N, uMaterials[j].indexOfRefelction);
             float tp = rayShape(P-Wp/1000.,Wp,uShapes[j]).y;
             vec4 Pp = P-Wp/1000.+tp*Wp;
-            vec4 Np = computeSurfaceNormal(Pp, uShapes[j]);
+            vec4 Np = n_front;
             vec4 Wpp = -refractRay(Wp, Np, 1./uMaterials[j].indexOfRefelction);
 
             Shape S;
@@ -288,7 +393,7 @@ for(int j =0; j<NS; j++)
                     S=uShapes[k];
                     M=uMaterials[k];
                     Ppp = Pp+tRefraction*Wpp;
-                    Npp = computeSurfaceNormal(Ppp, S);
+                    Npp = n_front;
                     tMinRefraction = tRefraction;
                 }
             }
@@ -301,6 +406,7 @@ for(int j =0; j<NS; j++)
      }
 
 }
+
 fragColor = vec4(sqrt(color), 1.0);
     
 }
